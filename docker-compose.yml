@@ -1,4 +1,27 @@
 services:
+  # ---- Mosquitto: MQTT broker for Qingping and other MQTT devices ----
+  # Config is baked into the image so bind mounts work with remote DOCKER_HOST.
+  mosquitto:
+    build:
+      context: ./mosquitto
+    image: home-sensors-mosquitto
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  # ---- Telegraf: MQTT → InfluxDB bridge for Qingping ----
+  telegraf:
+    build:
+      context: ./telegraf
+    environment:
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+    depends_on:
+      mosquitto:
+        condition: service_started
+      influxdb:
+        condition: service_started
+    restart: unless-stopped
+
   # ---- rtl_433: SDR receiver for 915 MHz sensors ----
   # Start rtl_tcp on the host first:  rtl_tcp -a 127.0.0.1
   rtl_433:
@@ -30,12 +53,13 @@ services:
 
   # ---- Grafana: dashboards and visualization ----
   grafana:
+    build:
+      context: ./grafana
     image: grafana/grafana-oss
     ports:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
     environment:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
     depends_on:
