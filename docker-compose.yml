@@ -1,0 +1,48 @@
+services:
+  # ---- rtl_433: SDR receiver for 915 MHz sensors ----
+  # Start rtl_tcp on the host first:  rtl_tcp -a 127.0.0.1
+  rtl_433:
+    build:
+      context: ./rtl_433
+    command: >-
+      -d rtl_tcp:host.docker.internal:1234 -f 915M -R 292 -M time:unix:usec:utc -F "influx://influxdb:8086/api/v2/write?org=home-sensors&bucket=sensors,token=${INFLUXDB_TOKEN}"
+    depends_on:
+      influxdb:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---- InfluxDB: time-series database ----
+  influxdb:
+    image: influxdb:2
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: home-sensors
+      DOCKER_INFLUXDB_INIT_BUCKET: sensors
+      DOCKER_INFLUXDB_INIT_RETENTION: 208w
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+    restart: unless-stopped
+
+  # ---- Grafana: dashboards and visualization ----
+  grafana:
+    image: grafana/grafana-oss
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+    depends_on:
+      influxdb:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  influxdb-data:
+  grafana-data:
