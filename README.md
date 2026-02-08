@@ -172,16 +172,6 @@ To log a Qingping air quality meter to InfluxDB and Grafana:
      |> filter(fn: (r) => r._field == "co2_value" or r._field == "pm25_value")
    ```
 
-   **Query all value fields** (only `_field` names ending with `_value`):
-
-   ```flux
-   import "strings"
-   from(bucket: "sensors")
-     |> range(start: -24h)
-     |> filter(fn: (r) => r._measurement == "qingping")
-     |> filter(fn: (r) => strings.hasSuffix(v: r._field, suffix: "_value"))
-   ```
-
    The **`topic`** tag holds the MQTT topic (e.g. `qingping/582D34013D73/up`). Fields include **`co2_value`** (ppm), **`pm25_value`**, **`pm10_value`**, **`temperature_value`** (°C), **`humidity_value`** (%), **`battery_value`**, **`tvoc_value`**, and corresponding **`*_status`** fields. Filter by `r.topic == "qingping/YOUR_MAC/up"` if you have multiple devices.
 
 6. **MQTT security settings**
