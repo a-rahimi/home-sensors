@@ -59,7 +59,7 @@ Supported sensors: ThermoPro TP211B (via rtl\_433); Qingping air quality meter (
       <array>
          <string>${RTL_TCP_PATH}</string>
          <string>-a</string>
-         <string>127.0.0.1</string>
+         <string>0.0.0.0</string>
       </array>
       <key>RunAtLoad</key>
       <true/>
