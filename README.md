@@ -19,17 +19,14 @@ flowchart LR
     QP[Qingping CGS1/CGS2]
   end
 
-  subgraph ingest["Ingest"]
-    RTL[rtl_433]
-    MQTT[(Mosquitto)]
-  end
-
+  RTL[rtl_433]
+  MQTT[(Mosquitto)]
   TELEGRAF[Telegraf]
   INFLUX[(InfluxDB 2)]
   GRAFANA[Grafana]
 
   TP -->|RF / rtl_tcp| RTL
-  RTL -->|publish| MQTT
+  RTL -->|write| INFLUX
   QP -->|Wi‑Fi MQTT| MQTT
   MQTT -->|subscribe| TELEGRAF
   TELEGRAF -->|write| INFLUX
@@ -132,11 +129,7 @@ For process output and errors: `docker-compose logs -f rtl_433`.
 **Stream readings (JSON):** To get a live stream of decoded events (one JSON object per line, CRLF), use the `/events` or `/stream` endpoint:
 
 ```bash
-# Chunked stream (recommended; keep-alive every 60s)
 curl -N http://localhost:3001/events
-
-# Or with httpie (longer timeout so keep-alives don’t end the stream)
-http --stream --timeout=70 localhost:3001/events
 ```
 
 Each line is a JSON object with fields like `time`, `model`, `id`, `temperature_C`, `humidity`, etc.
