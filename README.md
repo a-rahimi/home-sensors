@@ -12,6 +12,30 @@ Currently includes:
 
 Supported sensors: ThermoPro TP211B (via rtl\_433); Qingping air quality meter (e.g. CGS1/CGS2) via MQTT.
 
+```mermaid
+flowchart LR
+  subgraph sensors["Sensors"]
+    TP[ThermoPro TP211B]
+    QP[Qingping CGS1/CGS2]
+  end
+
+  subgraph ingest["Ingest"]
+    RTL[rtl_433]
+    MQTT[(Mosquitto)]
+  end
+
+  TELEGRAF[Telegraf]
+  INFLUX[(InfluxDB 2)]
+  GRAFANA[Grafana]
+
+  TP -->|RF / rtl_tcp| RTL
+  RTL -->|publish| MQTT
+  QP -->|Wi‑Fi MQTT| MQTT
+  MQTT -->|subscribe| TELEGRAF
+  TELEGRAF -->|write| INFLUX
+  INFLUX -->|query| GRAFANA
+```
+
 ## Prerequisites
 
 * Docker and Docker Compose
