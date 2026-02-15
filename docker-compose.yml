@@ -29,8 +29,10 @@ services:
   rtl_433:
     build:
       context: ./rtl_433
+    ports:
+      - "3001:3001"
     command: >-
-      -d rtl_tcp:host.docker.internal:1234 -f 915M -s 300000 -R 292 -M time:unix:usec:utc -F "influx://influxdb:8086/api/v2/write?org=home-sensors&bucket=sensors,token=${INFLUXDB_TOKEN}"
+      -d rtl_tcp:host.docker.internal:1234 -f 915M -s 300000 -R 293 -M time:unix:usec:utc -F "influx://influxdb:8086/api/v2/write?org=home-sensors&bucket=sensors,token=${INFLUXDB_TOKEN}" -F "http://0.0.0.0:3001"
     depends_on:
       influxdb:
         condition: service_started
@@ -40,7 +42,7 @@ services:
   influxdb:
     image: influxdb:2
     ports:
-      - "8086:8086"
+      - "3002:8086"
     volumes:
       - influxdb-data:/var/lib/influxdb2
     environment:

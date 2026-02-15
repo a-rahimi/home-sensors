@@ -127,6 +127,22 @@ docker-compose up -d --build
 
 For process output and errors: `docker-compose logs -f rtl_433`.
 
+**Debug via HTTP:** rtl\_433 runs an HTTP API server on port 3001. Open <http://localhost:3001> in a browser to see a live view of decoded messages, device list, and stats. Use this to confirm the SDR → rtl\_433 path before checking InfluxDB.
+
+**Stream readings (JSON):** To get a live stream of decoded events (one JSON object per line, CRLF), use the `/events` or `/stream` endpoint:
+
+```bash
+# Chunked stream (recommended; keep-alive every 60s)
+curl -N http://localhost:3001/events
+
+# Or with httpie (longer timeout so keep-alives don’t end the stream)
+http --stream --timeout=70 localhost:3001/events
+```
+
+Each line is a JSON object with fields like `time`, `model`, `id`, `temperature_C`, `humidity`, etc.
+
+You can also check if rtl\_433 is correctly reporting measurements to influxdb by querying influxdb:
+
 ```bash
 source .env
 docker-compose exec influxdb influx query \
@@ -142,6 +158,10 @@ Go to <http://localhost:3000>.
 Default login: `admin` / `admin` (you'll be prompted to change the password).
 
 The InfluxDB datasource is pre-configured.
+
+### InfluxDB UI
+
+The InfluxDB 2 web UI runs on port **3002**. Open <http://localhost:3002> in your browser and sign in with `INFLUXDB_USERNAME` and `INFLUXDB_PASSWORD` from `.env`. Use it to explore buckets, run Flux queries in the Data Explorer, and manage tokens.
 
 ### Create a dashboard
 
@@ -196,7 +216,7 @@ This causes your computer to send this one message to the Mosquitto broker; the 
 
 ### Querying InfluxDB directly
 
-You browse the content of InfluxDB interactively with in the InfluxDB UI. Open <http://server.local:8086> and sign in with the credentials from `.env`.
+You can also browse and query InfluxDB in the [InfluxDB UI](#influxdb-ui): open <http://localhost:3002> (or <http://server.local:3002> on a remote host) and sign in with the credentials from `.env`.
 
 ### Grafana
 
@@ -251,14 +271,3 @@ docker-compose up -d --build
 ```
 
 All `docker` and `docker-compose` commands in that shell session now run against the remote daemon.
-
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `rtl_433` can't connect / "Connection refused" | Make sure `rtl_tcp` is running on the host (`rtl_tcp -a 127.0.0.1 &`). Check that no other process is using the SDR dongle (`pkill rtl_tcp` then restart it). |
-| `rtl_433` can't find the USB dongle (Linux) | Make sure no host process is using it. Check `lsusb` for the RTL-SDR device. Try `privileged: true` in `docker-compose.yml` instead of `devices:`. |
-| InfluxDB says "already set up" | This is normal on restarts. The init only runs once; data persists in the `influxdb-data` volume. |
-| Grafana shows "No data" | Check `docker-compose logs rtl_433` for errors. Verify the Flux query measurement name matches the sensor model. |
-| Qingping data not in Grafana | Ensure the device is configured for this broker (developer console, then factory reset). Use the broker’s **LAN IP** as Host, not a hostname (device may not resolve DNS). Check `docker-compose logs telegraf`; confirm the device publishes to `qingping/+/up` and that InfluxDB has data in measurement `qingping` (bucket `sensors`). |
-| Need to wipe everything and start fresh | `docker-compose down -v` removes containers **and** volumes (all data). |
