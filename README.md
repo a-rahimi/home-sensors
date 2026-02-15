@@ -45,30 +45,30 @@ flowchart LR
 
 ## Quick Start
 
-1. **Edit credentials** (optional but recommended):
+### Edit credentials (optional but recommended)
 
-   ```bash
-   nano ~/home-sensors/.env
-   ```
+```bash
+nano ~/home-sensors/.env
+```
 
-   Change `INFLUXDB_TOKEN`, `INFLUXDB_USERNAME`, and `INFLUXDB_PASSWORD` to something secure.
+Change `INFLUXDB_TOKEN`, `INFLUXDB_USERNAME`, and `INFLUXDB_PASSWORD` to something secure.
 
-2. **Set up `rtl_tcp` as a service (macOS):**
+### Set up rtl\_tcp as a service (macOS)
 
-   Docker on macOS cannot access USB devices directly. Instead, `rtl_tcp`
-   runs natively and exposes the SDR dongle over TCP so the container can
-   reach it via `host.docker.internal:1234`.
+Docker on macOS cannot access USB devices directly. Instead, `rtl_tcp`
+runs natively and exposes the SDR dongle over TCP so the container can
+reach it via `host.docker.internal:1234`.
 
-   Create a launchd agent so `rtl_tcp` starts automatically on login and
-   restarts if it crashes:
+Create a launchd agent so `rtl_tcp` starts automatically on login and
+restarts if it crashes:
 
-   ```bash
-   mkdir -p ~/Library/LaunchAgents
+```bash
+mkdir -p ~/Library/LaunchAgents
 
-   RTL_TCP_PATH="$(which rtl_tcp)"
+RTL_TCP_PATH="$(which rtl_tcp)"
 
-   cat > ~/Library/LaunchAgents/com.home-sensors.rtl-tcp.plist << EOF
-   ```
+cat > ~/Library/LaunchAgents/com.home-sensors.rtl-tcp.plist << EOF
+```
 
 <?xml version="1.0" encoding="UTF-8"?>
 
@@ -99,10 +99,10 @@ EOF
 
 # Kill any existing rtl\_tcp process, then load the service
 
+```bash
 pkill rtl\_tcp || true
 launchctl load ~/Library/LaunchAgents/com.home-sensors.rtl-tcp.plist
-
-````
+```
 
 Manage the service with:
 
@@ -116,91 +116,105 @@ Manage the service with:
 > **Note:** On Linux you can skip this step and use USB passthrough
 > instead. See *Linux USB Passthrough* below.
 
-3. **Start the stack:**
+### Start the stack
 
 ```bash
 cd ~/home-sensors
 docker-compose up -d --build
-````
+```
 
-4. **Verify rtl\_433 is receiving data:**
+### Verify rtl\_433 is receiving data
 
-   ```bash
-   docker-compose logs -f rtl_433
-   ```
+For process output and errors: `docker-compose logs -f rtl_433`.
 
-   You should see temperature readings every ~50 seconds.
+```bash
+source .env
+docker-compose exec influxdb influx query \
+  'from(bucket:"sensors") |> range(start: -1h) |> filter(fn: (r) => r._measurement == "ThermoPro-TP211B") |> limit(n: 5)' \
+  --token "$INFLUXDB_TOKEN" --org home-sensors
+```
 
-5. **Open Grafana:**
+If you see rows with `temperature_C` (and optional `humidity`), the pipeline is working.
 
-   Go to <http://localhost:3000>.
-   Default login: `admin` / `admin` (you'll be prompted to change the password).
+### Open Grafana
 
-   The InfluxDB datasource is pre-configured.
+Go to <http://localhost:3000>.
+Default login: `admin` / `admin` (you'll be prompted to change the password).
 
-6. **Create a dashboard** with a Flux query like:
+The InfluxDB datasource is pre-configured.
 
-   ```flux
-   from(bucket: "sensors")
-     |> range(start: -24h)
-     |> filter(fn: (r) => r._measurement == "ThermoPro-TP211B")
-     |> filter(fn: (r) => r._field == "temperature_C")
-     |> map(fn: (r) => ({ r with _value: (r._value * 9.0 / 5.0) + 32.0, _field: "temperature_F" }))
-   ```
+### Create a dashboard
+
+Use a Flux query like:
+
+```flux
+from(bucket: "sensors")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r._measurement == "ThermoPro-TP211B")
+  |> filter(fn: (r) => r._field == "temperature_C")
+  |> map(fn: (r) => ({ r with _value: (r._value * 9.0 / 5.0) + 32.0, _field: "temperature_F" }))
+```
 
 ## Qingping air quality meter (MQTT)
 
 To log a Qingping air quality meter to InfluxDB and Grafana:
 
-1. **Configure the device to use your MQTT broker**
-   * Go to the [Qingping developer console](https://developer.qingping.co/privatisation/config) (register/login if needed).
-   * In **Private Access Config** → **Configurations**, create a new configuration.
-   * In **Self-built MQTT information**, set:
-     * **Host:** your machine’s LAN IP (the host where Docker runs). Use an IP address, not a hostname—the device often does not resolve DNS names and will stay disconnected otherwise.
-     * **Port:** `1883`
-   * In **Private Access Config** → **Device**, add your device (pair it first in the Qingping+ or Qingping IoT app), then assign this configuration to it.
-   * "Push" the configuration from the cloud UI.
-   * Update the MQTT configuration on the air monitor device under "Private Cloud".
+### Configure the device to use your MQTT broker
 
-2. **Verify**
-   `docker-compose logs -f telegraf` — you should see activity when the device publishes.
+* Go to the [Qingping developer console](https://developer.qingping.co/privatisation/config) (register/login if needed).
+* In **Private Access Config** → **Configurations**, create a new configuration.
+* In **Self-built MQTT information**, set:
+  * **Host:** your machine’s LAN IP (the host where Docker runs). Use an IP address, not a hostname—the device often does not resolve DNS names and will stay disconnected otherwise.
+  * **Port:** `1883`
+* In **Private Access Config** → **Device**, add your device (pair it first in the Qingping+ or Qingping IoT app), then assign this configuration to it.
+* "Push" the configuration from the cloud UI.
+* Update the MQTT configuration on the air monitor device under "Private Cloud".
 
-3. **Optional: shorter report interval**\
-   By default the Qingping meter may report only every 15 minutes. To switch to every 15 seconds you send one MQTT message from your computer to the broker; the meter listens on a “down” topic and applies the setting.
+### Verify
 
-   **Find your meter’s MAC address**\
-   Look this up on the device's "Private Cloud" panel, under "Private MQTT Setting". There, you'll see a topic like `qingping/A1:B2:C3:D4:E5:F6/up`. The MAC is `A1:B2:C3:D4:E5:F6`.
+To see each message as it arrives:
 
-   **Change the update interval**\
-   From the repo directory, run (replace `A1:B2:C3:D4:E5:F6` with your MAC):
+```bash
+docker-compose exec mosquitto mosquitto_sub -t 'qingping/#' -v
+```
 
-   ```bash
-   docker-compose exec mosquitto mosquitto_pub -t 'qingping/A1:B2:C3:D4:E5:F6/down' -m '{"id":1,"need_ack":1,"type":"17","setting":{"report_interval":15,"collect_interval":15,"co2_sampling_interval":15,"pm_sampling_interval":15}}'
-   ```
+### Optional: shorter report interval
 
-   This causes your computer to send this one message to the Mosquitto broker; the Qingping meter is subscribed to its `.../down` topic and receives it, then updates its report interval. You only need to run this once (until the meter is reset or reconfigured).
+By default the Qingping meter may report only every 15 minutes. To switch to every 15 seconds you send one MQTT message from your computer to the broker; the meter listens on a “down” topic and applies the setting.
 
-4. **Querying InfluxDB directly**
+**Find your meter’s MAC address**\
+Look this up on the device's "Private Cloud" panel, under "Private MQTT Setting". There, you'll see a topic like `qingping/A1:B2:C3:D4:E5:F6/up`. The MAC is `A1:B2:C3:D4:E5:F6`.
 
-   You browse the content of InfluxDB interactively with in the InfluxDB UI. Open <http://server.local:8086> and sign in with the credentials from `.env`.
+**Change the update interval**\
+From the repo directory, run (replace `A1:B2:C3:D4:E5:F6` with your MAC):
 
-5. **Grafana**
+```bash
+docker-compose exec mosquitto mosquitto_pub -t 'qingping/A1:B2:C3:D4:E5:F6/down' -m '{"id":1,"need_ack":1,"type":"17","setting":{"report_interval":15,"collect_interval":15,"co2_sampling_interval":15,"pm_sampling_interval":15}}'
+```
 
-   * Telegraf parses the first `sensorData` element only and uses the device timestamp, so fields are **`co2_value`**, **`pm25_value`**, **`temperature_value`**, **`humidity_value`**, etc. (no array index in names). Measurement is **`qingping`**; use the **`topic`** tag to filter if you have multiple devices.
-   * Example Flux for CO₂ and PM2.5:
+This causes your computer to send this one message to the Mosquitto broker; the Qingping meter is subscribed to its `.../down` topic and receives it, then updates its report interval. You only need to run this once (until the meter is reset or reconfigured).
 
-   ```flux
-   from(bucket: "sensors")
-     |> range(start: -24h)
-     |> filter(fn: (r) => r._measurement == "qingping")
-     |> filter(fn: (r) => r._field == "co2_value" or r._field == "pm25_value")
-   ```
+### Querying InfluxDB directly
 
-   The **`topic`** tag holds the MQTT topic (e.g. `qingping/582D34013D73/up`). Fields include **`co2_value`** (ppm), **`pm25_value`**, **`pm10_value`**, **`temperature_value`** (°C), **`humidity_value`** (%), **`battery_value`**, **`tvoc_value`**, and corresponding **`*_status`** fields. Filter by `r.topic == "qingping/YOUR_MAC/up"` if you have multiple devices.
+You browse the content of InfluxDB interactively with in the InfluxDB UI. Open <http://server.local:8086> and sign in with the credentials from `.env`.
 
-6. **MQTT security settings**
+### Grafana
 
-   For production or exposed networks, consider enabling MQTT authentication in `mosquitto/config/mosquitto.conf` (e.g. password file and `allow_anonymous false`).
+* Telegraf parses the first `sensorData` element only and uses the device timestamp, so fields are **`co2_value`**, **`pm25_value`**, **`temperature_value`**, **`humidity_value`**, etc. (no array index in names). Measurement is **`qingping`**; use the **`topic`** tag to filter if you have multiple devices.
+* Example Flux for CO₂ and PM2.5:
+
+```flux
+from(bucket: "sensors")
+  |> range(start: -24h)
+  |> filter(fn: (r) => r._measurement == "qingping")
+  |> filter(fn: (r) => r._field == "co2_value" or r._field == "pm25_value")
+```
+
+The **`topic`** tag holds the MQTT topic (e.g. `qingping/582D34013D73/up`). Fields include **`co2_value`** (ppm), **`pm25_value`**, **`pm10_value`**, **`temperature_value`** (°C), **`humidity_value`** (%), **`battery_value`**, **`tvoc_value`**, and corresponding **`*_status`** fields. Filter by `r.topic == "qingping/YOUR_MAC/up"` if you have multiple devices.
+
+### MQTT security settings
+
+For production or exposed networks, consider enabling MQTT authentication in `mosquitto/config/mosquitto.conf` (e.g. password file and `allow_anonymous false`).
 
 ## Stopping / Restarting
 
